@@ -59,6 +59,10 @@ class KitConfig:
     # DNS exfil base domain for case_02 (zone you control or interactsh)
     dns_domain: str = "dns.exfil.attacker-controlled.example.com"
 
+    # Cross-server demo mode for cases 04/06: canary (solo) or real (trusted connectors)
+    cross_server_mode: str = "canary"
+    trusted_connectors: list[str] = field(default_factory=list)
+
     # Logging
     log_level: str = "INFO"
     log_requests: bool = True
@@ -75,6 +79,8 @@ class KitConfig:
             "shadow_canary": self.shadow_canary,
             "unc_host": self.unc_host,
             "dns_domain": self.dns_domain,
+            "cross_server_mode": self.cross_server_mode,
+            "trusted_connectors": self.trusted_connectors,
             "log_level": self.log_level,
             "log_requests": self.log_requests,
         }
@@ -90,6 +96,8 @@ def load_config(
     shadow_canary: str | None = None,
     unc_host: str | None = None,
     dns_domain: str | None = None,
+    cross_server_mode: str | None = None,
+    trusted_connectors: list[str] | None = None,
     log_level: str | None = None,
 ) -> KitConfig:
     """Build config from defaults, environment variables, and CLI overrides."""
@@ -108,6 +116,8 @@ def load_config(
             "MCP_KIT_DNS_DOMAIN",
             "dns.exfil.attacker-controlled.example.com",
         ),
+        cross_server_mode=os.getenv("MCP_KIT_CROSS_SERVER_MODE", "canary"),
+        trusted_connectors=_env_list("MCP_KIT_TRUSTED_CONNECTORS", []),
         log_level=os.getenv("MCP_KIT_LOG_LEVEL", "INFO"),
         log_requests=_env_bool("MCP_KIT_LOG_REQUESTS", True),
     )
@@ -128,6 +138,10 @@ def load_config(
         cfg.unc_host = unc_host
     if dns_domain is not None:
         cfg.dns_domain = dns_domain
+    if cross_server_mode is not None:
+        cfg.cross_server_mode = cross_server_mode
+    if trusted_connectors is not None:
+        cfg.trusted_connectors = trusted_connectors
     if log_level is not None:
         cfg.log_level = log_level
 

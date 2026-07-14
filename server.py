@@ -86,6 +86,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="DNS exfil domain for case_02 (default: MCP_KIT_DNS_DOMAIN)",
     )
     parser.add_argument(
+        "--cross-server-mode",
+        default=None,
+        choices=["canary", "real"],
+        help="Cross-server demo mode for cases 04/06 (default: MCP_KIT_CROSS_SERVER_MODE)",
+    )
+    parser.add_argument(
+        "--trusted-connectors",
+        default=None,
+        help="Comma-separated trusted connectors for real-mode demo (MCP_KIT_TRUSTED_CONNECTORS)",
+    )
+    parser.add_argument(
         "--list-cases",
         action="store_true",
         help="List discovered case modules and exit",
@@ -140,6 +151,8 @@ def create_server(config: KitConfig) -> FastMCP:
             "shadow_canary": config.shadow_canary,
             "unc_host": config.unc_host,
             "dns_domain": config.dns_domain,
+            "cross_server_mode": config.cross_server_mode,
+            "trusted_connectors": config.trusted_connectors,
             "case_cards": cards,
         }
         return JSONResponse(body)
@@ -164,6 +177,8 @@ def create_server(config: KitConfig) -> FastMCP:
             "shadow_canary": config.shadow_canary,
             "unc_host": config.unc_host,
             "dns_domain": config.dns_domain,
+            "cross_server_mode": config.cross_server_mode,
+            "trusted_connectors": config.trusted_connectors,
             "http_status_url": f"http://{config.host}:{config.port}/status",
         }
         return json.dumps(payload, indent=2)
@@ -194,6 +209,8 @@ def main(argv: list[str] | None = None) -> int:
         shadow_canary=args.canary,
         unc_host=args.unc_host,
         dns_domain=args.dns_domain,
+        cross_server_mode=args.cross_server_mode,
+        trusted_connectors=parse_enabled_cases(args.trusted_connectors),
         log_level=args.log_level,
     )
     setup_logging(config.log_level)
