@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Local HTTP exfil listener for MCP security research.
+Local HTTP callback listener for ops integration diagnostics.
 
 Logs incoming requests (path, query parameters, headers) to stdout and
 optionally to a log file. Serves a tiny 1x1 GIF so markdown image fetches
 complete successfully.
-
 """
 
 from __future__ import annotations
@@ -14,10 +13,13 @@ import argparse
 import base64
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+
+from config import env_key, get_tool_ns
 
 # 1x1 transparent GIF
 _TINY_GIF = base64.b64decode(
@@ -27,7 +29,7 @@ _TINY_GIF = base64.b64decode(
 logger = logging.getLogger("listener")
 
 
-def _decode_exfil_param(value: str) -> str | None:
+def _decode_callback_param(value: str) -> str | None:
     """Best-effort decode of base64url payloads from case tools."""
 
     try:
@@ -44,7 +46,7 @@ def format_request_record(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
 
     decoded_payload = None
     if "d" in query and isinstance(query["d"], str):
-        decoded_payload = _decode_exfil_param(query["d"])
+        decoded_payload = _decode_callback_param(query["d"])
 
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -57,13 +59,12 @@ def format_request_record(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
     }
 
 
-class ExfilListenerHandler(BaseHTTPRequestHandler):
+class CallbackListenerHandler(BaseHTTPRequestHandler):
     """Log all requests and return a harmless image response."""
 
     log_file: str | None = None
 
     def log_message(self, format: str, *args: Any) -> None:
-        # Suppress default stderr logging; we emit structured records instead.
         return
 
     def _handle(self) -> None:
@@ -79,7 +80,7 @@ class ExfilListenerHandler(BaseHTTPRequestHandler):
 
         if record["decoded_payload"]:
             print(
-                f"[EXFIL] decoded payload: {record['decoded_payload']}",
+                f"[CALLBACK] decoded payload: {record['decoded_payload']}",
                 flush=True,
             )
 
@@ -87,8 +88,19 @@ class ExfilListenerHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "image/gif")
         self.send_header("Content-Length", str(len(_TINY_GIF)))
         self.send_header("Cache-Control", "no-store")
+        self._send_cors_headers()
         self.end_headers()
         self.wfile.write(_TINY_GIF)
+
+    def _send_cors_headers(self) -> None:
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(204)
+        self._send_cors_headers()
+        self.end_headers()
 
     def do_GET(self) -> None:
         self._handle()
@@ -99,6 +111,7 @@ class ExfilListenerHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "image/gif")
         self.send_header("Content-Length", str(len(_TINY_GIF)))
+        self._send_cors_headers()
         self.end_headers()
 
     def do_POST(self) -> None:
@@ -117,9 +130,19 @@ class ExfilListenerHandler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Local MCP exfil listener")
-    parser.add_argument("--host", default="127.0.0.1", help="Bind address")
-    parser.add_argument("--port", type=int, default=9999, help="Bind port")
+    ns = get_tool_ns()
+    parser = argparse.ArgumentParser(description="Local MCP callback listener")
+    parser.add_argument(
+        "--host",
+        default=None,
+        help=f"Bind address (default: {ns}_LISTENER_HOST or 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help=f"Bind port (default: {ns}_LISTENER_PORT or 9999)",
+    )
     parser.add_argument(
         "--log-file",
         default=None,
@@ -132,15 +155,22 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    host = args.host or os.getenv(env_key("LISTENER_HOST"), "127.0.0.1")
+    port = (
+        args.port
+        if args.port is not None
+        else int(os.getenv(env_key("LISTENER_PORT"), "9999"))
+    )
+
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
-    ExfilListenerHandler.log_file = args.log_file
-    server = ThreadingHTTPServer((args.host, args.port), ExfilListenerHandler)
+    CallbackListenerHandler.log_file = args.log_file
+    server = ThreadingHTTPServer((host, port), CallbackListenerHandler)
 
-    print(f"Exfil listener running at http://{args.host}:{args.port}/", flush=True)
+    print(f"Callback listener running at http://{host}:{port}/", flush=True)
     print("Waiting for requests... (Ctrl+C to stop)", flush=True)
 
     try:

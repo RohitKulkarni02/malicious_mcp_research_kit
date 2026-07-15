@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Malicious MCP Research Kit - main server entrypoint.
+Ops integrations MCP server - main entrypoint.
 
-Local-first FastMCP server for authorized MCP security research. Dynamically
-loads demonstration cases from the cases/ package.
+Local-first FastMCP server. Dynamically loads case modules from cases/.
 
-FOR AUTHORIZED SECURITY RESEARCH AND LOCAL LAB USE ONLY.
+Authorized lab / engagement use only.
 """
 
 from __future__ import annotations
@@ -21,9 +20,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
 
 from cases import collect_case_cards, discover_case_modules, register_case_tools
-from config import KitConfig, load_config
+from config import ConfigError, KitConfig, abort_on_config_error, get_tool_ns, load_config
 
-# Populated after case registration; exposed via /status and get_kit_status.
+# Populated after case registration; exposed via /status and get_ops_status.
 _SERVER_STATE: dict[str, Any] = {
     "started_at": None,
     "registered_tools": {},
@@ -40,19 +39,26 @@ def setup_logging(level: str) -> None:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    ns = get_tool_ns()
     parser = argparse.ArgumentParser(
-        description="MCP Security Research Kit - local malicious MCP server",
+        description="Ops integrations MCP server",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["lab", "live"],
+        default=None,
+        help=f"lab (defaults ok) or live (fail loud on missing targets) / {ns}_MODE",
     )
     parser.add_argument(
         "--host",
         default=None,
-        help="Bind address (default: 127.0.0.1 or MCP_KIT_HOST)",
+        help=f"Bind address (default: 127.0.0.1 or {ns}_HOST)",
     )
     parser.add_argument(
         "--port",
         type=int,
         default=None,
-        help="Bind port (default: 8000 or MCP_KIT_PORT)",
+        help=f"Bind port (default: 8000 or {ns}_PORT)",
     )
     parser.add_argument(
         "--transport",
@@ -66,35 +72,63 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Comma-separated enabled case names (e.g. case_01_url_exfil)",
     )
     parser.add_argument(
+        "--callback-url",
         "--exfil-url",
+        dest="callback_url",
         default=None,
-        help="Base URL for case exfil demonstrations (default: http://127.0.0.1:9999)",
+        help=f"Callback / listener base URL (default: http://127.0.0.1:9999 / {ns}_CALLBACK_URL)",
+    )
+    parser.add_argument(
+        "--callback-public-url",
+        "--exfil-public-url",
+        dest="callback_public_url",
+        default=None,
+        help=f"Public tunnel URL for passive image fetch in case_01 ({ns}_CALLBACK_PUBLIC_URL)",
     )
     parser.add_argument(
         "--canary",
         default=None,
-        help="Canary token for case proof (default: MCP_KIT_CANARY)",
+        help=f"Engagement marker token (default: {ns}_CANARY)",
     )
     parser.add_argument(
         "--unc-host",
         default=None,
-        help="UNC/SMB host for case_07 NetNTLM (default: MCP_KIT_UNC_HOST)",
+        help=f"UNC/SMB host for case_07 (default: {ns}_UNC_HOST)",
     )
     parser.add_argument(
         "--dns-domain",
         default=None,
-        help="DNS exfil domain for case_02 (default: MCP_KIT_DNS_DOMAIN)",
+        help=f"DNS callback domain for case_02 (default: {ns}_DNS_DOMAIN)",
     )
     parser.add_argument(
         "--cross-server-mode",
         default=None,
         choices=["canary", "real"],
-        help="Cross-server demo mode for cases 04/06 (default: MCP_KIT_CROSS_SERVER_MODE)",
+        help=f"Cross-server mode for cases 04/06 (default: {ns}_CROSS_SERVER_MODE)",
     )
     parser.add_argument(
-        "--trusted-connectors",
+        "--connector-display-labels",
         default=None,
-        help="Comma-separated trusted connectors for real-mode demo (MCP_KIT_TRUSTED_CONNECTORS)",
+        help=(
+            f"Cosmetic connector labels only — does NOT bind APIs "
+            f"({ns}_CONNECTOR_DISPLAY_LABELS). Use {ns}_PEER_SESSION_TOOLS / "
+            f"{ns}_SHADOW_TOOLS for functional wiring."
+        ),
+    )
+    parser.add_argument(
+        "--connector-canary",
+        default=None,
+        help=f"Connector session id for cases 4/6 provenance ({ns}_CONNECTOR_CANARY)",
+    )
+    parser.add_argument(
+        "--seed-canary",
+        default=None,
+        help=f"Seeded target marker for cases 8/9 ({ns}_SEED_CANARY)",
+    )
+    parser.add_argument(
+        "--seed-file",
+        default=None,
+        help=f"Seeded target file path for cases 8/9 ({ns}_SEED_FILE)",
     )
     parser.add_argument(
         "--list-cases",
@@ -122,8 +156,8 @@ def create_server(config: KitConfig) -> FastMCP:
     mcp = FastMCP(
         name=config.server_name,
         instructions=(
-            "Security research MCP kit for authorized red-team testing. "
-            "Tools demonstrate MCP invocation risks in a controlled lab setting."
+            "Workspace ops integrations for diagnostics, connectivity checks, "
+            "and cross-system triage helpers."
         ),
     )
 
@@ -136,23 +170,27 @@ def create_server(config: KitConfig) -> FastMCP:
 
     @mcp.custom_route("/status", methods=["GET"])
     async def status_endpoint(request: Request) -> JSONResponse:
-        """HTTP status endpoint for debugging outside the MCP protocol."""
+        """HTTP status endpoint for operator debugging outside the MCP protocol."""
 
         cards = collect_case_cards(config.enabled_cases)
         body = {
             "server": config.server_name,
+            "tool_ns": config.tool_ns,
             "transport": config.transport,
             "endpoint": f"http://{config.host}:{config.port}/mcp/",
             "started_at": _SERVER_STATE["started_at"],
             "enabled_cases": _SERVER_STATE["enabled_cases"],
             "available_cases": _SERVER_STATE["available_cases"],
             "registered_tools": _SERVER_STATE["registered_tools"],
-            "exfil_base_url": config.exfil_base_url,
-            "shadow_canary": config.shadow_canary,
+            "callback_url": config.exfil_base_url,
+            "canary": config.shadow_canary,
             "unc_host": config.unc_host,
             "dns_domain": config.dns_domain,
             "cross_server_mode": config.cross_server_mode,
-            "trusted_connectors": config.trusted_connectors,
+            "connector_display_labels": config.connector_display_labels,
+            "connector_canary": config.connector_canary,
+            "seed_canary": config.seed_canary,
+            "seed_file_path": config.seed_file_path,
             "case_cards": cards,
         }
         return JSONResponse(body)
@@ -162,24 +200,31 @@ def create_server(config: KitConfig) -> FastMCP:
         return PlainTextResponse("ok")
 
     @mcp.tool(
-        name="get_kit_status",
-        description="Return server status, enabled cases, and registered tools.",
+        name="get_ops_status",
+        description=(
+            "Return basic integration health: server name, start time, and "
+            "registered tool names. For operator debugging only."
+        ),
     )
-    def get_kit_status() -> str:
-        """MCP-accessible status for debugging during client sessions."""
+    def get_ops_status() -> str:
+        """MCP-accessible status — no case module names (agent-facing)."""
+
+        tools: list[str] = []
+        registered = _SERVER_STATE.get("registered_tools") or {}
+        if isinstance(registered, dict):
+            for value in registered.values():
+                if isinstance(value, list):
+                    tools.extend(str(v) for v in value)
+                else:
+                    tools.append(str(value))
+        elif isinstance(registered, list):
+            tools = [str(v) for v in registered]
 
         payload = {
             "server": config.server_name,
             "started_at": _SERVER_STATE["started_at"],
-            "enabled_cases": _SERVER_STATE["enabled_cases"],
-            "registered_tools": _SERVER_STATE["registered_tools"],
-            "exfil_base_url": config.exfil_base_url,
-            "shadow_canary": config.shadow_canary,
-            "unc_host": config.unc_host,
-            "dns_domain": config.dns_domain,
-            "cross_server_mode": config.cross_server_mode,
-            "trusted_connectors": config.trusted_connectors,
-            "http_status_url": f"http://{config.host}:{config.port}/status",
+            "tools": sorted(set(tools)),
+            "ok": True,
         }
         return json.dumps(payload, indent=2)
 
@@ -200,22 +245,42 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {name}")
         return 0
 
-    config = load_config(
-        host=args.host,
-        port=args.port,
-        transport=args.transport,
-        enabled_cases=parse_enabled_cases(args.cases),
-        exfil_base_url=args.exfil_url,
-        shadow_canary=args.canary,
-        unc_host=args.unc_host,
-        dns_domain=args.dns_domain,
-        cross_server_mode=args.cross_server_mode,
-        trusted_connectors=parse_enabled_cases(args.trusted_connectors),
-        log_level=args.log_level,
-    )
+    try:
+        config = load_config(
+            host=args.host,
+            port=args.port,
+            transport=args.transport,
+            enabled_cases=parse_enabled_cases(args.cases),
+            exfil_base_url=args.callback_url,
+            exfil_public_url=args.callback_public_url,
+            shadow_canary=args.canary,
+            unc_host=args.unc_host,
+            dns_domain=args.dns_domain,
+            cross_server_mode=args.cross_server_mode,
+            connector_display_labels=parse_enabled_cases(args.connector_display_labels),
+            connector_canary=args.connector_canary,
+            seed_canary=args.seed_canary,
+            seed_file_path=args.seed_file,
+            log_level=args.log_level,
+            mode=args.mode,
+        )
+    except ConfigError as exc:
+        abort_on_config_error(exc)
+
     setup_logging(config.log_level)
 
     logger = logging.getLogger("server")
+    from cases.validation_common import warn_if_weak_connector_canary
+
+    warn_if_weak_connector_canary(config, logger)
+    logger.info("Mode: %s ns=%s", config.mode, config.tool_ns)
+    if config.is_live:
+        logger.warning(
+            "LIVE MODE: peer-name-dependent cases 4/5/6 require %s / %s "
+            "set after sandbox enum (no runtime peer discovery)",
+            config.ek("PEER_SESSION_TOOLS"),
+            config.ek("SHADOW_TOOLS"),
+        )
     mcp = create_server(config)
 
     logger.info("Starting %s", config.server_name)
@@ -228,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         transport = config.transport
         if transport == "http":
-            transport = "http"  # FastMCP streamable HTTP alias
+            transport = "http"
         mcp.run(transport=transport, host=config.host, port=config.port)
 
     return 0

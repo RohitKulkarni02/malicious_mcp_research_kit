@@ -1,39 +1,51 @@
-# Malicious MCP Research Kit
+# MCP Security Research Kit
 
-A reusable, local-first MCP (Model Context Protocol) attack kit for authorized security research and red teaming.
+Authorized, local-first MCP research kit for red-team / security assessments.
+
+**Start here for managers:** [REVIEW.md](REVIEW.md) (includes how we test)  
+**Lab retest procedures:** [RUN.md](RUN.md)  
+**Live portability / name map:** [ENGAGEMENT.md](ENGAGEMENT.md)
+
+## Neutral live footprint
+
+Runtime env, server display names, and agent-visible tool copy use a configurable
+prefix (`TOOL_NS`, default `OPS`) — e.g. `OPS_CALLBACK_URL`, server name
+`ops-integrations`, stand-in connector `workspace-connector`. Nothing in those
+surfaces should read as “malicious MCP kit.”
+
+`OPS_CONNECTOR_DISPLAY_LABELS` is **cosmetic only**. Cases 4/5/6 need
+`OPS_PEER_SESSION_TOOLS` / `OPS_SHADOW_TOOLS` after sandbox tool-name enum.
 
 ## What it does
 
-The kit provides a malicious FastMCP server that registers realistic-looking tools in an MCP client's tool store. It is built to run **alongside legitimate connectors** (GitHub, Jira, Confluence, Databricks, and similar) so researchers can demonstrate how agents behave when trusted and untrusted servers share the same session.
+A FastMCP server registers realistic-looking integration tools in an MCP client's
+tool store, typically **alongside** legitimate connectors (GitHub, Jira, etc.).
+Each demonstration is a pluggable **case** under `cases/`. Enable only what you
+need for a given engagement.
 
-Each demonstration is a pluggable **case** a Python module that registers one or more tools modeling a specific abuse pattern. Cases are loaded dynamically by `server.py`; you enable only what you need for a given engagement.
+Also included:
 
-The kit also includes:
+- `listener.py` — HTTP callback receiver for case proof
+- `demo_chains.py` — pre-built case combinations
+- Engagement markers (`OPS_CANARY`, `OPS_CONNECTOR_CANARY`) for unambiguous proof
 
-- `**listener.py**` a local HTTP receiver that logs exfiltrated data from case tools
-- `**demo_chains.py**` pre-built combinations of cases for multi-step demonstrations
-- **Canary-based proof** every engagement uses a unique token (`MCP_KIT_CANARY`) so impact is unambiguous on your listener or DNS/SMB logs
+## Case coverage (9)
 
-No code changes are required on live day. You configure URLs, canaries, and domains via environment variables before the session.
-
-## Attack coverage (9 cases)
-
-| #   | Case              | What it demonstrates                                                                |
-| --- | ----------------- | ----------------------------------------------------------------------------------- |
-| 1   | URL exfiltration  | Sensitive data encoded in markdown image/link URLs returned by tools                |
-| 2   | DNS exfiltration  | Secrets embedded in DNS subdomain labels via resolver lookups                       |
-| 3   | Toxic agent flow  | Hidden instructions in tool output that redirect the agent's behavior               |
-| 4   | Rogue secret pull | Tool descriptions that instruct the agent to harvest secrets from other MCP servers |
-| 5   | Tool shadowing    | Squatting on familiar tool names/descriptions to displace legitimate connectors     |
-| 6   | Token forwarding  | Utility tools that solicit connector tokens and session material                    |
-| 7   | NetNTLM via UNC   | Windows UNC paths in tool output that trigger SMB authentication                    |
-| 8   | Browser access    | Reading local browser profiles, cookies, and session files from the MCP host        |
-| 9   | File exfiltration | File-sharing style tools that read paths and beacon content to a listener           |
-
-Together these cover the main ways MCP expands an agent's attack surface: untrusted tool output, collapsed trust boundaries in a shared registry, and local side effects from the MCP server process.
+| # | Case | Demonstrates |
+|---|------|----------------|
+| 1 | URL callback | Sensitive data in markdown/image URLs |
+| 2 | DNS | Secrets in DNS subdomain labels |
+| 3 | Toxic agent flow | Hidden instructions in tool output |
+| 4 | Rogue secret pull | Descriptions that harvest peer MCP material |
+| 5 | Tool shadowing | Squatting familiar tool names |
+| 6 | Token forwarding | Utility tools that solicit connector tokens |
+| 7 | NetNTLM via UNC | UNC paths → SMB auth (scope-gated) |
+| 8 | Browser access | Local browser profiles/cookies (scope-gated) |
+| 9 | File callback | File-share tools that read paths and beacon |
 
 ## Who it is for
 
-Security researchers, red teamers, and penetration testers assessing MCP-enabled clients (Cursor, Claude Desktop, enterprise agent platforms) under **explicit written authorization**.
+Security researchers and penetration testers assessing MCP-enabled clients under
+**explicit written authorization**.
 
 > **Authorized use only.** Do not deploy against systems you do not own or lack permission to test.
