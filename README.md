@@ -2,20 +2,6 @@
 
 Authorized, local-first MCP research kit for red-team / security assessments.
 
-**Start here for managers:** [REVIEW.md](REVIEW.md) (includes how we test)  
-**Lab retest procedures:** [RUN.md](RUN.md)  
-**Live portability / name map:** [ENGAGEMENT.md](ENGAGEMENT.md)
-
-## Neutral live footprint
-
-Runtime env, server display names, and agent-visible tool copy use a configurable
-prefix (`TOOL_NS`, default `OPS`) — e.g. `OPS_CALLBACK_URL`, server name
-`ops-integrations`, stand-in connector `workspace-connector`. Nothing in those
-surfaces should read as “malicious MCP kit.”
-
-`OPS_CONNECTOR_DISPLAY_LABELS` is **cosmetic only**. Cases 4/5/6 need
-`OPS_PEER_SESSION_TOOLS` / `OPS_SHADOW_TOOLS` after sandbox tool-name enum.
-
 ## What it does
 
 A FastMCP server registers realistic-looking integration tools in an MCP client's
