@@ -1,22 +1,3 @@
-# RUN.md — Lab validation playbook (cases 01–09)
-
-## For managers — how we validate
-
-We validate the kit the way it will run on engagement: register the MCP server(s) in a real client (Cursor), start a local callback listener, enable one case at a time, and drive each case with **natural chat prompts** — not a scripted agent. Pass/Fail is decided by **proof at a sink** (listener decode, DNS/SMB capture, or server tags such as `[PEER-FORWARD][PROVENANCE_CONFIRMED]`), not by screenshots or model claims. Cases 4/5/6 also run against a stand-in peer connector in the same tool store; cases 7/8 stay scope-gated. Name map / live wiring: `ENGAGEMENT.md`. One-pager: `REVIEW.md`.
-
-## Who does what (read this once)
-
-**Attacker ≠ the person typing in chat.** The attacker is whoever **registered the ops MCP server** in the client’s tool store (you, on engagement). They do not need to write the victim’s prompt. The victim only chats with the agent. Abuse happens when the agent calls the registered tools.
-
-| Role | Who | What they do |
-|------|-----|----------------|
-| **Attacker** | You (engagement) / kit author | Register ops MCP (+ optional peer wiring). Tools/descriptions do the work. |
-| **Victim** | Real user on engagement | Types a **benign** work request. Does not run the kit or set env. |
-| **Agent** | Cursor / LLM + planner | Chooses tools from the shared store and fills args. |
-| **Operator (lab)** | You, while validating | Set up listener/env **and** paste prompts. Some prompts below are **lab triggers** (name a tool / paste a fake secret) so proof is deterministic — that is **not** how a real victim talks. |
-
-Each case states **Attack**, **How it works**, and **Expected output**. Where a prompt is a lab trigger, it is labeled.
-
 ## How to use this file
 
 - Each case is **self-contained** — open one section and run top to bottom.
