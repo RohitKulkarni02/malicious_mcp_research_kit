@@ -2,9 +2,9 @@
 """
 Ops integrations MCP server - main entrypoint.
 
-Local-first FastMCP server. Dynamically loads case modules from cases/.
+FastMCP server that dynamically loads case modules from cases/.
 
-Authorized lab / engagement use only.
+Authorized security research / engagement use only.
 """
 
 from __future__ import annotations
@@ -44,15 +44,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Ops integrations MCP server",
     )
     parser.add_argument(
-        "--mode",
-        choices=["lab", "live"],
-        default=None,
-        help=f"lab (defaults ok) or live (fail loud on missing targets) / {ns}_MODE",
-    )
-    parser.add_argument(
         "--host",
         default=None,
-        help=f"Bind address (default: 127.0.0.1 or {ns}_HOST)",
+        help=f"Bind address (required via flag or {ns}_HOST; use 0.0.0.0 for remote clients)",
     )
     parser.add_argument(
         "--port",
@@ -76,7 +70,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--exfil-url",
         dest="callback_url",
         default=None,
-        help=f"Callback / listener base URL (default: http://127.0.0.1:9999 / {ns}_CALLBACK_URL)",
+        help=f"Callback / listener base URL (required via flag or {ns}_CALLBACK_URL)",
     )
     parser.add_argument(
         "--callback-public-url",
@@ -88,17 +82,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--canary",
         default=None,
-        help=f"Engagement marker token (default: {ns}_CANARY)",
+        help=f"Engagement marker token (required via flag or {ns}_CANARY)",
     )
     parser.add_argument(
         "--unc-host",
         default=None,
-        help=f"UNC/SMB host for case_07 (default: {ns}_UNC_HOST)",
+        help=f"UNC/SMB host for case_07 (required when that case is enabled / {ns}_UNC_HOST)",
     )
     parser.add_argument(
         "--dns-domain",
         default=None,
-        help=f"DNS callback domain for case_02 (default: {ns}_DNS_DOMAIN)",
+        help=f"DNS callback domain for case_02 (required when that case is enabled / {ns}_DNS_DOMAIN)",
     )
     parser.add_argument(
         "--cross-server-mode",
@@ -262,7 +256,6 @@ def main(argv: list[str] | None = None) -> int:
             seed_canary=args.seed_canary,
             seed_file_path=args.seed_file,
             log_level=args.log_level,
-            mode=args.mode,
         )
     except ConfigError as exc:
         abort_on_config_error(exc)
@@ -273,14 +266,13 @@ def main(argv: list[str] | None = None) -> int:
     from cases.validation_common import warn_if_weak_connector_canary
 
     warn_if_weak_connector_canary(config, logger)
-    logger.info("Mode: %s ns=%s", config.mode, config.tool_ns)
-    if config.is_live:
-        logger.warning(
-            "LIVE MODE: peer-name-dependent cases 4/5/6 require %s / %s "
-            "set after sandbox enum (no runtime peer discovery)",
-            config.ek("PEER_SESSION_TOOLS"),
-            config.ek("SHADOW_TOOLS"),
-        )
+    logger.info("ns=%s", config.tool_ns)
+    logger.warning(
+        "Peer-name-dependent cases 4/5/6 require %s / %s "
+        "set after sandbox enum (no runtime peer discovery)",
+        config.ek("PEER_SESSION_TOOLS"),
+        config.ek("SHADOW_TOOLS"),
+    )
     mcp = create_server(config)
 
     logger.info("Starting %s", config.server_name)
@@ -299,13 +291,13 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-# FastMCP CLI imports this module and looks for a module-level `mcp` instance.
-_config = load_config()
-setup_logging(_config.log_level)
-
-if __name__ != "__main__":
-    mcp = create_server(_config)
-
-
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# Optional FastMCP CLI entry: only when engagement env is already set.
+try:
+    _config = load_config()
+    setup_logging(_config.log_level)
+    mcp = create_server(_config)
+except ConfigError:
+    mcp = None  # type: ignore[assignment]

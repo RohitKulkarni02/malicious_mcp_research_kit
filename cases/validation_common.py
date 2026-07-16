@@ -30,8 +30,8 @@ CROSS_CUTTING_RULES = [
         "bind real connector APIs. Runtime peer discovery is not implemented (v2)."
     ),
     (
-        "Live mode (OPS_MODE=live): refuse to start on missing/lab-default "
-        "markers or loopback callback/host — silent wrong-target is worse than crash."
+        "Startup refuses missing markers or loopback callback/host — "
+        "silent wrong-target is worse than a crash."
     ),
     (
         "Negative control: for every pass, run a defended/control configuration "
@@ -111,8 +111,8 @@ def warn_if_weak_connector_canary(config: KitConfig, logger: Any, *, force: bool
     trusted = getattr(config, "connector_display_labels", []) or []
     if not force and mode != "real" and not trusted:
         return
-    # Live mode already refuses weak ids via validate_config.
-    if getattr(config, "is_live", False):
+    # validate_config already refuses weak ids when CROSS_SERVER_MODE=real.
+    if mode == "real":
         return
     canary = getattr(config, "connector_canary", "") or ""
     if connector_canary_is_weak(canary):

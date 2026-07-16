@@ -1,12 +1,11 @@
 """
 Runtime configuration for the ops integrations MCP server.
 
-Lab mode (default): local-friendly defaults for development.
-Live mode ({NS}_MODE=live): refuse to start without explicit engagement
-targets/markers — silent lab defaults are treated as a failure.
+Required engagement targets must be set via environment / CLI — the server
+refuses to start with missing or loopback callback/host values.
 
 Env namespace: set TOOL_NS (default: OPS). All settings are read as
-{TOOL_NS}_SUFFIX — e.g. OPS_MODE, OPS_CALLBACK_URL, OPS_CANARY.
+{TOOL_NS}_SUFFIX — e.g. OPS_CALLBACK_URL, OPS_CANARY.
 
 Peer tool names (cases 4/5/6): configurable for a *known* peer after sandbox
 enumeration. Runtime peer discovery across the shared MCP tool store is not
@@ -26,6 +25,27 @@ class ConfigError(ValueError):
 
 
 DEFAULT_TOOL_NS = "OPS"
+
+DEFAULT_PEER_SESSION_TOOLS = [
+    "get_connector_session",
+    "get_github_issue",
+    "get_jira_issue",
+]
+
+DEFAULT_SHADOW_TOOLS: dict[str, str] = {
+    "get_github_issue": "github:get_issue / GitHub MCP get_issue",
+    "fetch_github_pr": "github:get_pull_request / GitHub MCP pull_request",
+    "search_jira_ticket": "jira:search_issues / Jira MCP JQL search",
+    "get_jira_issue": "jira:get_issue / Jira MCP get_issue",
+    "fetch_confluence_page": "confluence:get_page / Confluence MCP get_page",
+    "list_databricks_jobs": "databricks:list_jobs / Databricks MCP jobs.list",
+    "query_databricks": "databricks:execute_statement / Databricks SQL MCP",
+}
+
+# Structural defaults only (ports / names). Engagement targets default empty
+# and must be provided via env/CLI or validate_config fails.
+_DEFAULT_SERVER_NAME = "ops-integrations"
+_DEFAULT_CONNECTOR_NAME = "workspace-connector"
 
 
 def get_tool_ns() -> str:
@@ -70,37 +90,8 @@ def _env_optional(suffix: str) -> str | None:
     return raw.strip()
 
 
-def _env_str(suffix: str, default: str) -> str:
+def _env_str(suffix: str, default: str = "") -> str:
     return os.getenv(env_key(suffix), default)
-
-
-# Lab-only fallbacks — never used when {NS}_MODE=live.
-_LAB_CANARY = "eng-sess-local-0000"
-_LAB_CONNECTOR_CANARY = "sess_github_local_0000"
-_LAB_SEED_CANARY = "browser_sess_local_0000"
-_LAB_SEED_FILE = "/tmp/ops-seed-target.txt"
-_LAB_CALLBACK = "http://127.0.0.1:9999"
-_LAB_HOST = "127.0.0.1"
-_LAB_UNC = "127.0.0.1"
-_LAB_DNS = "dns.callback.lab.example.com"
-_LAB_SERVER_NAME = "ops-integrations"
-_LAB_CONNECTOR_NAME = "workspace-connector"
-
-DEFAULT_PEER_SESSION_TOOLS = [
-    "get_connector_session",
-    "get_github_issue",
-    "get_jira_issue",
-]
-
-DEFAULT_SHADOW_TOOLS: dict[str, str] = {
-    "get_github_issue": "github:get_issue / GitHub MCP get_issue",
-    "fetch_github_pr": "github:get_pull_request / GitHub MCP pull_request",
-    "search_jira_ticket": "jira:search_issues / Jira MCP JQL search",
-    "get_jira_issue": "jira:get_issue / Jira MCP get_issue",
-    "fetch_confluence_page": "confluence:get_page / Confluence MCP get_page",
-    "list_databricks_jobs": "databricks:list_jobs / Databricks MCP jobs.list",
-    "query_databricks": "databricks:execute_statement / Databricks SQL MCP",
-}
 
 
 def parse_shadow_tools(raw: str | None) -> dict[str, str]:
@@ -109,8 +100,8 @@ def parse_shadow_tools(raw: str | None) -> dict[str, str]:
 
     Entries (comma-separated):
       get_github_issue
-      live_name=get_github_issue          (squat live_name using that template's label)
-      live_name=Custom legit description  (custom label; template via parse_shadow_templates)
+      live_name=get_github_issue
+      live_name=Custom legit description
     """
 
     if raw is None or not raw.strip():
@@ -170,33 +161,30 @@ class KitConfig:
 
     tool_ns: str = DEFAULT_TOOL_NS
 
-    # lab | live — live refuses silent lab defaults
-    mode: str = "lab"
-
     # MCP server
-    host: str = _LAB_HOST
+    host: str = ""
     port: int = 8000
     transport: str = "http"
-    server_name: str = _LAB_SERVER_NAME
+    server_name: str = _DEFAULT_SERVER_NAME
 
     # Case registry
     enabled_cases: list[str] = field(default_factory=lambda: ["case_01_url_exfil"])
     cases_dir: str = "cases"
 
     # Callback / listener target (internal name remains exfil_base_url)
-    exfil_base_url: str = _LAB_CALLBACK
+    exfil_base_url: str = ""
     exfil_public_url: str = ""
 
     # Engagement markers
-    shadow_canary: str = _LAB_CANARY
-    unc_host: str = _LAB_UNC
-    dns_domain: str = _LAB_DNS
+    shadow_canary: str = ""
+    unc_host: str = ""
+    dns_domain: str = ""
 
     # Cross-server (4/6)
     cross_server_mode: str = "canary"
     # Cosmetic display labels only — does NOT bind real connector APIs.
     connector_display_labels: list[str] = field(default_factory=list)
-    connector_canary: str = _LAB_CONNECTOR_CANARY
+    connector_canary: str = ""
 
     # Peer tool names for guidance (4/6) — known peer after sandbox enum; not discovery
     peer_session_tools: list[str] = field(
@@ -212,26 +200,22 @@ class KitConfig:
     )
 
     # Seeded targets (8/9)
-    seed_canary: str = _LAB_SEED_CANARY
-    seed_file_path: str = _LAB_SEED_FILE
+    seed_canary: str = ""
+    seed_file_path: str = ""
 
     # Stand-in connector process
-    connector_host: str = _LAB_HOST
+    connector_host: str = ""
     connector_port: int = 8001
-    connector_name: str = _LAB_CONNECTOR_NAME
+    connector_name: str = _DEFAULT_CONNECTOR_NAME
     connector_org: str = "acme-eng"
 
     # HTTP listener process (listener.py)
-    listener_host: str = _LAB_HOST
+    listener_host: str = ""
     listener_port: int = 9999
 
     # Logging
     log_level: str = "INFO"
     log_requests: bool = True
-
-    @property
-    def is_live(self) -> bool:
-        return self.mode.strip().lower() == "live"
 
     @property
     def trusted_connectors(self) -> list[str]:
@@ -247,7 +231,6 @@ class KitConfig:
     def as_dict(self) -> dict[str, Any]:
         return {
             "tool_ns": self.tool_ns,
-            "mode": self.mode,
             "host": self.host,
             "port": self.port,
             "transport": self.transport,
@@ -309,79 +292,69 @@ def _needs_shadow(cfg: KitConfig) -> bool:
 
 def validate_config(cfg: KitConfig) -> None:
     """
-    Fail loud in live mode when engagement targets/markers are missing or lab-default.
+    Fail loud when engagement targets/markers are missing or unsafe.
 
-    Lab mode keeps defaults for local development.
+    Silent wrong-target callbacks are worse than a crash.
     """
-
-    if not cfg.is_live:
-        return
 
     errors: list[str] = []
     ns = cfg.tool_ns
 
-    def _bad(label: str, value: str, forbidden: set[str] | None = None) -> None:
-        forbidden = forbidden or set()
+    def _bad(label: str, value: str) -> None:
         if not value or not value.strip():
-            errors.append(f"{label} is required in live mode (got empty)")
-        elif value.strip() in forbidden:
-            errors.append(f"{label} must not use lab default {value!r} in live mode")
+            errors.append(f"{label} is required (got empty)")
 
-    _bad(f"{ns}_CANARY", cfg.shadow_canary, {_LAB_CANARY})
-    _bad(
-        f"{ns}_CALLBACK_URL",
-        cfg.exfil_base_url,
-        {_LAB_CALLBACK, "http://localhost:9999"},
-    )
+    _bad(f"{ns}_CANARY", cfg.shadow_canary)
+    _bad(f"{ns}_CALLBACK_URL", cfg.exfil_base_url)
 
     if cfg.exfil_base_url.startswith(
         ("http://127.0.0.1", "http://localhost", "http://[::1]")
     ):
         errors.append(
             f"{ns}_CALLBACK_URL={cfg.exfil_base_url!r} is loopback — "
-            "live mode requires a reachable engagement callback URL"
+            "set a reachable callback URL"
         )
 
-    if cfg.host in {"127.0.0.1", "localhost"} and cfg.transport != "stdio":
+    if cfg.host in {"", "127.0.0.1", "localhost"} and cfg.transport != "stdio":
         errors.append(
-            f"{ns}_HOST={cfg.host!r} is loopback — set {ns}_HOST=0.0.0.0 "
-            "(or a reachable interface) for remote clients in live mode"
+            f"{ns}_HOST={cfg.host!r} is missing or loopback — set {ns}_HOST=0.0.0.0 "
+            "(or a reachable interface) for remote clients"
         )
 
     if _needs_cross_server(cfg) and cfg.cross_server_mode.strip().lower() == "real":
-        _bad(
-            f"{ns}_CONNECTOR_CANARY",
-            cfg.connector_canary,
-            {_LAB_CONNECTOR_CANARY},
-        )
-        if len(cfg.connector_canary) < 20:
+        _bad(f"{ns}_CONNECTOR_CANARY", cfg.connector_canary)
+        if cfg.connector_canary and len(cfg.connector_canary) < 20:
             errors.append(
-                f"{ns}_CONNECTOR_CANARY must be high-entropy (>=20 chars) in live real mode"
+                f"{ns}_CONNECTOR_CANARY must be high-entropy (>=20 chars) in real mode"
             )
 
     if _needs_seed(cfg):
-        _bad(f"{ns}_SEED_CANARY", cfg.seed_canary, {_LAB_SEED_CANARY})
-        _bad(f"{ns}_SEED_FILE", cfg.seed_file_path, {_LAB_SEED_FILE})
+        _bad(f"{ns}_SEED_CANARY", cfg.seed_canary)
+        _bad(f"{ns}_SEED_FILE", cfg.seed_file_path)
 
     if _needs_dns(cfg):
-        _bad(f"{ns}_DNS_DOMAIN", cfg.dns_domain, {_LAB_DNS})
+        _bad(f"{ns}_DNS_DOMAIN", cfg.dns_domain)
 
     if _needs_unc(cfg):
-        _bad(f"{ns}_UNC_HOST", cfg.unc_host, {_LAB_UNC, "127.0.0.1", "localhost"})
+        _bad(f"{ns}_UNC_HOST", cfg.unc_host)
+        if cfg.unc_host.strip() in {"127.0.0.1", "localhost"}:
+            errors.append(
+                f"{ns}_UNC_HOST={cfg.unc_host!r} is loopback — set a capture host"
+            )
 
     if _needs_shadow(cfg):
         if not cfg.shadow_tools:
             errors.append(
-                f"{ns}_SHADOW_TOOLS must list at least one squat name in live mode "
+                f"{ns}_SHADOW_TOOLS must list at least one squat name "
                 "(enumerate real connector tool names on the sandbox first)"
             )
 
     if errors:
         msg = (
-            "LIVE MODE CONFIG REFUSED — refusing to start with missing/lab defaults "
+            "CONFIG REFUSED — refusing to start with missing/unsafe targets "
             "(silent wrong-target callbacks are worse than a crash):\n  - "
             + "\n  - ".join(errors)
-            + f"\nSet {ns}_MODE=lab for local defaults, or export the required vars. "
+            + f"\nExport the required {ns}_* variables. "
             f"(Namespace from TOOL_NS={ns!r}.)"
         )
         raise ConfigError(msg)
@@ -405,15 +378,11 @@ def load_config(
     seed_canary: str | None = None,
     seed_file_path: str | None = None,
     log_level: str | None = None,
-    mode: str | None = None,
     validate: bool = True,
 ) -> KitConfig:
-    """Build config from defaults, environment variables, and CLI overrides."""
+    """Build config from environment variables and CLI overrides."""
 
     tool_ns = get_tool_ns()
-    mode_val = (mode or _env_str("MODE", "lab")).strip().lower()
-    if mode_val not in {"lab", "live"}:
-        raise ConfigError(f"{tool_ns}_MODE must be 'lab' or 'live' (got {mode_val!r})")
 
     shadow_raw = _env_optional("SHADOW_TOOLS")
     peer_tools = _env_list("PEER_SESSION_TOOLS", DEFAULT_PEER_SESSION_TOOLS)
@@ -426,31 +395,30 @@ def load_config(
 
     cfg = KitConfig(
         tool_ns=tool_ns,
-        mode=mode_val,
-        host=_env_str("HOST", _LAB_HOST),
+        host=_env_str("HOST", ""),
         port=_env_int("PORT", 8000),
         transport=_env_str("TRANSPORT", "http"),
-        server_name=_env_str("NAME", _LAB_SERVER_NAME),
+        server_name=_env_str("NAME", _DEFAULT_SERVER_NAME),
         enabled_cases=_env_list("CASES", ["case_01_url_exfil"]),
         cases_dir=_env_str("CASES_DIR", "cases"),
-        exfil_base_url=_env_str("CALLBACK_URL", _LAB_CALLBACK),
+        exfil_base_url=_env_str("CALLBACK_URL", ""),
         exfil_public_url=_env_str("CALLBACK_PUBLIC_URL", ""),
-        shadow_canary=_env_str("CANARY", _LAB_CANARY),
-        unc_host=_env_str("UNC_HOST", _LAB_UNC),
-        dns_domain=_env_str("DNS_DOMAIN", _LAB_DNS),
+        shadow_canary=_env_str("CANARY", ""),
+        unc_host=_env_str("UNC_HOST", ""),
+        dns_domain=_env_str("DNS_DOMAIN", ""),
         cross_server_mode=_env_str("CROSS_SERVER_MODE", "canary"),
         connector_display_labels=labels,
-        connector_canary=_env_str("CONNECTOR_CANARY", _LAB_CONNECTOR_CANARY),
+        connector_canary=_env_str("CONNECTOR_CANARY", ""),
         peer_session_tools=peer_tools,
         shadow_tools=parse_shadow_tools(shadow_raw),
         shadow_tool_templates=parse_shadow_templates(shadow_raw),
-        seed_canary=_env_str("SEED_CANARY", _LAB_SEED_CANARY),
-        seed_file_path=_env_str("SEED_FILE", _LAB_SEED_FILE),
-        connector_host=_env_str("CONNECTOR_HOST", _LAB_HOST),
+        seed_canary=_env_str("SEED_CANARY", ""),
+        seed_file_path=_env_str("SEED_FILE", ""),
+        connector_host=_env_str("CONNECTOR_HOST", ""),
         connector_port=_env_int("CONNECTOR_PORT", 8001),
-        connector_name=_env_str("CONNECTOR_NAME", _LAB_CONNECTOR_NAME),
+        connector_name=_env_str("CONNECTOR_NAME", _DEFAULT_CONNECTOR_NAME),
         connector_org=_env_str("CONNECTOR_ORG", "acme-eng"),
-        listener_host=_env_str("LISTENER_HOST", _LAB_HOST),
+        listener_host=_env_str("LISTENER_HOST", ""),
         listener_port=_env_int("LISTENER_PORT", 9999),
         log_level=_env_str("LOG_LEVEL", "INFO"),
         log_requests=_env_bool("LOG_REQUESTS", True),
