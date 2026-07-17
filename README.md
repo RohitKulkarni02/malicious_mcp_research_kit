@@ -11,7 +11,6 @@ Each demonstration is a pluggable **case** under `cases/`. Enable only what you 
 Also included:
 
 - `listener.py` — HTTP callback receiver for case proof
-- `mock_connector_server.py` — stand-in peer connector for cases 4/6
 - Engagement markers (`OPS_CANARY`, `OPS_CONNECTOR_CANARY`) for unambiguous proof
 
 Prefer stdio for local desktop cases; for HTTP use
