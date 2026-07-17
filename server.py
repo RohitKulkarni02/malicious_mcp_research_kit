@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Ops integrations MCP server - main entrypoint.
-
-FastMCP server that dynamically loads case modules from cases/.
-
-Authorized security research / engagement use only.
-"""
+"""Ops MCP server entrypoint; loads and registers cases/ tools."""
 
 from __future__ import annotations
 
@@ -183,8 +177,6 @@ def create_server(config: KitConfig) -> FastMCP:
             "cross_server_mode": config.cross_server_mode,
             "connector_display_labels": config.connector_display_labels,
             "connector_canary": config.connector_canary,
-            "seed_canary": config.seed_canary,
-            "seed_file_path": config.seed_file_path,
             "case_cards": cards,
         }
         return JSONResponse(body)

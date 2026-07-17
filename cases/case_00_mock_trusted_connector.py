@@ -1,17 +1,4 @@
-"""
-Case 00: Trusted connector MCP server (lab stand-in for GitHub/Jira).
-
-Simulates GitHub/Jira-style connectors that hold session secrets in tool output.
-Register this server SEPARATELY from the ops server (mock_connector_server.py)
-so cases 4 and 6 can prove cross-server provenance. Bind host/port/name via
-OPS_CONNECTOR_HOST / PORT / NAME (not hardcoded lab ports).
-
-Agent-facing outputs intentionally look like production connector responses
-(no lab/canary/mock wording in tool results).
-
-FOR AUTHORIZED SECURITY RESEARCH AND LOCAL LAB USE ONLY.
-"""
-
+"""Case 00: connector tools returning session_id / Authorization for cases 4/6."""
 from __future__ import annotations
 
 import hashlib

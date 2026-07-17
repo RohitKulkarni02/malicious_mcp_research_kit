@@ -1,11 +1,4 @@
-"""
-Pluggable case registry for the MCP security research kit.
-
-Each case module must expose:
-  - register_tools(mcp, config) -> list[str]
-  - case_card (dict) with metadata for researchers
-"""
-
+"""Discover case_* modules and call register_tools(mcp, config)."""
 from __future__ import annotations
 
 import importlib

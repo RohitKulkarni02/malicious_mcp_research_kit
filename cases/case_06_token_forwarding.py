@@ -1,19 +1,4 @@
-"""
-Case 06: Token forwarding to peer-controlled MCP server.
-
-Educational demonstration for shared MCP tool store environments where trusted
-connectors (GitHub, Jira, etc.) hold session tokens in agent context. Utility-
-sounding tools instruct the model to forward that material here for verification,
-logging and exfiltrating it with the engagement canary.
-
-Two-stage demo (no code edits on live day):
-  - Solo validation: OPS_CROSS_SERVER_MODE=canary (default) -> [CANARY-MODE]
-  - Full proof: OPS_CROSS_SERVER_MODE=real and/or OPS_CONNECTOR_DISPLAY_LABELS=github,jira
-    with real connectors in the client tool store -> [PEER-FORWARD]
-
-FOR AUTHORIZED SECURITY RESEARCH AND LOCAL LAB USE ONLY.
-"""
-
+"""Case 06: verification-framed tools that capture forwarded session tokens."""
 from __future__ import annotations
 
 import logging

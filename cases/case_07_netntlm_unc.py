@@ -1,17 +1,4 @@
-"""
-Case 07: NetNTLM coercion via UNC path references.
-
-Educational demonstration for Windows-hosted MCP clients. Tools return attacker-
-controlled UNC paths (\\\\host\\share\\file). When the Windows client or agent
-runtime resolves them, SMB authentication may leak NetNTLM challenge-response
-hashes to Responder or an SMB listener.
-
-FOR AUTHORIZED SECURITY RESEARCH AND LOCAL LAB USE ONLY.
-
-Live engagement: set OPS_CALLBACK_URL, OPS_CANARY, and OPS_UNC_HOST
-(no code edits).
-"""
-
+"""Case 07: return UNC paths under OPS_UNC_HOST; server-beacon secondary proof."""
 from __future__ import annotations
 
 import json

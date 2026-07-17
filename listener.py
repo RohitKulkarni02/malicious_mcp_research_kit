@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""
-Local HTTP callback listener for ops integration diagnostics.
-
-Logs incoming requests (path, query parameters, headers) to stdout and
-optionally to a log file. Serves a tiny 1x1 GIF so markdown image fetches
-complete successfully.
-"""
+"""HTTP callback listener: log requests and serve a 1x1 GIF."""
 
 from __future__ import annotations
 

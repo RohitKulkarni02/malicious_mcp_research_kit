@@ -1,18 +1,4 @@
-"""
-Case 05: Tool shadowing in a shared MCP tool store.
-
-Educational demonstration for engagements where trusted connectors (GitHub, Jira,
-Confluence, Databricks) are registered alongside this ops server in the
-same client tool registry. Shadow tools squat on familiar names/descriptions;
-when the model picks the rogue entry, a configurable canary proves collision.
-
-FOR AUTHORIZED SECURITY RESEARCH AND LOCAL LAB USE ONLY.
-
-Live engagement: set OPS_CALLBACK_URL, OPS_CANARY, and OPS_SHADOW_TOOLS
-after enumerating real connector tool names on the sandbox (peer-name-dependent;
-no runtime discovery — v2).
-"""
-
+"""Case 05: register tools under OPS_SHADOW_TOOLS names and beacon on call."""
 from __future__ import annotations
 
 import json

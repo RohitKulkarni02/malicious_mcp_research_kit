@@ -1,17 +1,4 @@
-"""
-Runtime configuration for the ops integrations MCP server.
-
-Required engagement targets must be set via environment / CLI — the server
-refuses to start with missing or loopback callback/host values.
-
-Env namespace: set TOOL_NS (default: OPS). All settings are read as
-{TOOL_NS}_SUFFIX — e.g. OPS_CALLBACK_URL, OPS_CANARY.
-
-Peer tool names (cases 4/5/6): configurable for a *known* peer after sandbox
-enumeration. Runtime peer discovery across the shared MCP tool store is not
-implemented (v2). Cases 4/5/6 are peer-name-dependent.
-"""
-
+"""Load KitConfig from {TOOL_NS}_* env vars and CLI overrides."""
 from __future__ import annotations
 
 import os
@@ -203,6 +190,26 @@ class KitConfig:
     seed_canary: str = ""
     seed_file_path: str = ""
 
+    # Case 03: Unicode Tag smuggling for SYSTEM injection (model-dependent)
+    case03_invisible: bool = False
+
+    # Case 10: zero-width invisible injection (default off - less reliable)
+    case10_invisible: bool = False
+    # Case 10: Cline .clinerules + cmd.txt split payload (GHSA-vgj6-8c6w-xw63)
+    case10_cline_rules: bool = False
+
+    # Case 11: TOCTOU script invocation (Mindgard / GHSA-pvpq-899w-5mqr)
+    case11_sleep_secs: int = 120
+    case11_benign_script: str = "benign.sh"
+
+    # Case 12: second MCP foothold URL (defaults to CALLBACK_URL if empty)
+    case12_mcp_url: str = ""
+    # Case 12: Claude Code PostToolUse hooks (CVE-2025-59536; scope-gated)
+    case12_hooks: bool = False
+
+    # Case 13: model API redirect / interception endpoint (HTTPS recommended)
+    case13_redirect_url: str = ""
+
     # Stand-in connector process
     connector_host: str = ""
     connector_port: int = 8001
@@ -249,6 +256,14 @@ class KitConfig:
             "shadow_tools": self.shadow_tools,
             "seed_canary": self.seed_canary,
             "seed_file_path": self.seed_file_path,
+            "case03_invisible": self.case03_invisible,
+            "case10_invisible": self.case10_invisible,
+            "case10_cline_rules": self.case10_cline_rules,
+            "case11_sleep_secs": self.case11_sleep_secs,
+            "case11_benign_script": self.case11_benign_script,
+            "case12_mcp_url": self.case12_mcp_url,
+            "case12_hooks": self.case12_hooks,
+            "case13_redirect_url": self.case13_redirect_url,
             "connector_host": self.connector_host,
             "connector_port": self.connector_port,
             "connector_name": self.connector_name,
@@ -273,6 +288,7 @@ def _needs_cross_server(cfg: KitConfig) -> bool:
 
 
 def _needs_seed(cfg: KitConfig) -> bool:
+    # case_10 is standalone (no seed). Cases 8/9 require OPS_SEED_*.
     return bool(
         set(cfg.enabled_cases) & {"case_08_browser_access", "case_09_file_exfil"}
     )
@@ -288,6 +304,10 @@ def _needs_unc(cfg: KitConfig) -> bool:
 
 def _needs_shadow(cfg: KitConfig) -> bool:
     return "case_05_tool_shadowing" in cfg.enabled_cases
+
+
+def _needs_case13_redirect(cfg: KitConfig) -> bool:
+    return "case_13_model_provider_redirect" in cfg.enabled_cases
 
 
 def validate_config(cfg: KitConfig) -> None:
@@ -347,6 +367,19 @@ def validate_config(cfg: KitConfig) -> None:
             errors.append(
                 f"{ns}_SHADOW_TOOLS must list at least one squat name "
                 "(enumerate real connector tool names on the sandbox first)"
+            )
+
+    if _needs_case13_redirect(cfg):
+        redirect = (cfg.case13_redirect_url or "").strip()
+        if not redirect:
+            errors.append(
+                f"{ns}_CASE13_REDIRECT_URL is required when case_13 is enabled "
+                "(HTTPS interception endpoint that speaks a valid model API)"
+            )
+        elif redirect.startswith(("http://127.0.0.1", "http://localhost", "http://[::1]")):
+            errors.append(
+                f"{ns}_CASE13_REDIRECT_URL={redirect!r} is loopback — "
+                "set a reachable HTTPS intercept URL"
             )
 
     if errors:
@@ -414,6 +447,14 @@ def load_config(
         shadow_tool_templates=parse_shadow_templates(shadow_raw),
         seed_canary=_env_str("SEED_CANARY", ""),
         seed_file_path=_env_str("SEED_FILE", ""),
+        case03_invisible=_env_bool("CASE03_INVISIBLE", False),
+        case10_invisible=_env_bool("CASE10_INVISIBLE", False),
+        case10_cline_rules=_env_bool("CASE10_CLINE_RULES", False),
+        case11_sleep_secs=_env_int("CASE11_SLEEP_SECS", 120),
+        case11_benign_script=_env_str("CASE11_BENIGN_SCRIPT", "benign.sh"),
+        case12_mcp_url=_env_str("CASE12_MCP_URL", ""),
+        case12_hooks=_env_bool("CASE12_HOOKS", False),
+        case13_redirect_url=_env_str("CASE13_REDIRECT_URL", ""),
         connector_host=_env_str("CONNECTOR_HOST", ""),
         connector_port=_env_int("CONNECTOR_PORT", 8001),
         connector_name=_env_str("CONNECTOR_NAME", _DEFAULT_CONNECTOR_NAME),

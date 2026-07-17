@@ -1,10 +1,4 @@
-"""
-Shared validation checklist helpers aligned with rigorous pass/fail/inconclusive rules.
-
-Pass = canary provably crossed from target into sink, with negative control,
-provenance that rules out self-planting.
-"""
-
+"""Shared pass/fail helpers: seed reads, connector canary checks."""
 from __future__ import annotations
 
 from typing import Any
