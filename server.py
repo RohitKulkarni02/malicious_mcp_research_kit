@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# ENGAGEMENT ISOLATION: each tester must run their own server
+# instance with a unique OPS_CANARY, OPS_CALLBACK_URL, and port.
+# Never share one running instance across engagements or testers.
+# Recommended: one process per tester, own port, own listener.
 """Ops MCP server entrypoint; loads and registers cases/ tools."""
 
 from __future__ import annotations
@@ -13,10 +17,17 @@ from fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
 
-from cases import collect_case_cards, discover_case_modules, register_case_tools
-from config import ConfigError, KitConfig, abort_on_config_error, get_tool_ns, load_config
+from cases import discover_case_modules, register_case_tools
+from config import (
+    ConfigError,
+    KitConfig,
+    abort_on_config_error,
+    canary_is_default_or_weak,
+    get_tool_ns,
+    load_config,
+)
 
-# Populated after case registration; exposed via /status and get_ops_status.
+# Populated after case registration; exposed via /status and get_integration_status.
 _SERVER_STATE: dict[str, Any] = {
     "started_at": None,
     "registered_tools": {},
@@ -35,7 +46,7 @@ def setup_logging(level: str) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     ns = get_tool_ns()
     parser = argparse.ArgumentParser(
-        description="Ops integrations MCP server",
+        description="Workspace integrations MCP server",
     )
     parser.add_argument(
         "--host",
@@ -138,13 +149,26 @@ def parse_enabled_cases(raw: str | None) -> list[str] | None:
     return [name.strip() for name in raw.split(",") if name.strip()]
 
 
+def _flatten_tool_names(registered: Any) -> list[str]:
+    tools: list[str] = []
+    if isinstance(registered, dict):
+        for value in registered.values():
+            if isinstance(value, list):
+                tools.extend(str(v) for v in value)
+            else:
+                tools.append(str(value))
+    elif isinstance(registered, list):
+        tools = [str(v) for v in registered]
+    return sorted(set(tools))
+
+
 def create_server(config: KitConfig) -> FastMCP:
     global _SERVER_STATE
 
     mcp = FastMCP(
         name=config.server_name,
         instructions=(
-            "Workspace ops integrations for diagnostics, connectivity checks, "
+            "Workspace integrations for diagnostics, connectivity checks, "
             "and cross-system triage helpers."
         ),
     )
@@ -158,26 +182,16 @@ def create_server(config: KitConfig) -> FastMCP:
 
     @mcp.custom_route("/status", methods=["GET"])
     async def status_endpoint(request: Request) -> JSONResponse:
-        """HTTP status endpoint for operator debugging outside the MCP protocol."""
+        """Minimal HTTP status — tool names only (no case cards / summaries)."""
 
-        cards = collect_case_cards(config.enabled_cases)
+        warn_shared = canary_is_default_or_weak(config.shadow_canary)
         body = {
-            "server": config.server_name,
-            "tool_ns": config.tool_ns,
-            "transport": config.transport,
-            "endpoint": f"http://{config.host}:{config.port}/mcp/",
-            "started_at": _SERVER_STATE["started_at"],
-            "enabled_cases": _SERVER_STATE["enabled_cases"],
-            "available_cases": _SERVER_STATE["available_cases"],
-            "registered_tools": _SERVER_STATE["registered_tools"],
-            "callback_url": config.exfil_base_url,
+            "status": "ok",
+            "registered_tools": _flatten_tool_names(
+                _SERVER_STATE.get("registered_tools")
+            ),
             "canary": config.shadow_canary,
-            "unc_host": config.unc_host,
-            "dns_domain": config.dns_domain,
-            "cross_server_mode": config.cross_server_mode,
-            "connector_display_labels": config.connector_display_labels,
-            "connector_canary": config.connector_canary,
-            "case_cards": cards,
+            "warn_shared": warn_shared,
         }
         return JSONResponse(body)
 
@@ -186,30 +200,19 @@ def create_server(config: KitConfig) -> FastMCP:
         return PlainTextResponse("ok")
 
     @mcp.tool(
-        name="get_ops_status",
+        name="get_integration_status",
         description=(
             "Return basic integration health: server name, start time, and "
             "registered tool names. For operator debugging only."
         ),
     )
-    def get_ops_status() -> str:
+    def get_integration_status() -> str:
         """MCP-accessible status — no case module names (agent-facing)."""
-
-        tools: list[str] = []
-        registered = _SERVER_STATE.get("registered_tools") or {}
-        if isinstance(registered, dict):
-            for value in registered.values():
-                if isinstance(value, list):
-                    tools.extend(str(v) for v in value)
-                else:
-                    tools.append(str(value))
-        elif isinstance(registered, list):
-            tools = [str(v) for v in registered]
 
         payload = {
             "server": config.server_name,
             "started_at": _SERVER_STATE["started_at"],
-            "tools": sorted(set(tools)),
+            "tools": _flatten_tool_names(_SERVER_STATE.get("registered_tools")),
             "ok": True,
         }
         return json.dumps(payload, indent=2)
@@ -258,7 +261,17 @@ def main(argv: list[str] | None = None) -> int:
     from cases.validation_common import warn_if_weak_connector_canary
 
     warn_if_weak_connector_canary(config, logger)
-    logger.info("ns=%s", config.tool_ns)
+
+    if canary_is_default_or_weak(config.shadow_canary):
+        logger.warning(
+            "ENGAGEMENT ISOLATION: %s is unset or looks like a shared/default "
+            "placeholder (%r). Each tester must use a unique canary, callback URL, "
+            "and port — never share one running instance across engagements.",
+            config.ek("CANARY"),
+            config.shadow_canary,
+        )
+
+    logger.info("ns=%s server_name=%s", config.tool_ns, config.server_name)
     logger.warning(
         "Peer-name-dependent cases 4/5/6 require %s / %s "
         "set after sandbox enum (no runtime peer discovery)",

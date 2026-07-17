@@ -24,6 +24,15 @@ The listener binds on `0.0.0.0:9999` for all interfaces. Set `OPS_CALLBACK_URL` 
 - LAN engagement: `http://YOUR_LAN_IP:9999`
 - Company infrastructure: `https://listener.your-domain.com` or internal hostname
 
+**Cloud-hosted targets:** A LAN IP like 192.168.x.x is not reachable from cloud-hosted products. For any target that is not on your local network you need one of:
+- A public domain with your server exposed (company infra preferred)
+- A reverse proxy on a public IP
+- A tunnel: `ngrok http 9999` → use the `https://xxx.ngrok.io` URL
+
+Ask the team for infrastructure before engaging cloud-hosted targets.
+
+**Engagement isolation:** Each tester must run their own server instance with a unique `OPS_CANARY`, port, and listener. Never share one running instance across engagements or testers — canary tokens and Case 12 config keys will collide.
+
 ### Starting a case
 
 ```bash
@@ -47,7 +56,7 @@ python server.py \
 ```json
 {
   "mcpServers": {
-    "ops-integrations": {
+    "workspace-integrations": {
       "url": "http://127.0.0.1:8000/mcp"
     }
   }
@@ -59,7 +68,7 @@ python server.py \
 ```json
 {
   "mcpServers": {
-    "ops-integrations": {
+    "workspace-integrations": {
       "command": "/path/to/.venv/bin/python",
       "args": [
         "/path/to/server.py",
@@ -70,7 +79,8 @@ python server.py \
       ],
       "env": {
         "OPS_CANARY": "eng-clientname-20260716-01",
-        "OPS_CALLBACK_URL": "http://YOUR_LAN_IP:9999"
+        "OPS_CALLBACK_URL": "http://YOUR_LAN_IP:9999",
+        "OPS_SERVER_NAME": "workspace-integrations"
       }
     }
   }

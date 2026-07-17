@@ -31,8 +31,23 @@ DEFAULT_SHADOW_TOOLS: dict[str, str] = {
 
 # Structural defaults only (ports / names). Engagement targets default empty
 # and must be provided via env/CLI or validate_config fails.
-_DEFAULT_SERVER_NAME = "ops-integrations"
+_DEFAULT_SERVER_NAME = "workspace-integrations"
 _DEFAULT_CONNECTOR_NAME = "workspace-connector"
+_DEFAULT_RESOURCE_NAME = "workspace-preview"
+
+# Placeholder / lab canaries that must not be reused across engagements.
+_WEAK_CANARY_MARKERS = (
+    "eng-sess-local",
+    "eng-sess-lab",
+    "lab-local",
+    "CHANGE_ME",
+    "change-me",
+    "PASTE",
+    "placeholder",
+    "default-canary",
+    "CANARY-LOCAL",
+    "test-canary",
+)
 
 
 def get_tool_ns() -> str:
@@ -153,6 +168,8 @@ class KitConfig:
     port: int = 8000
     transport: str = "http"
     server_name: str = _DEFAULT_SERVER_NAME
+    # Case 01 MCP resource URI scheme (e.g. workspace-preview://...)
+    resource_name: str = _DEFAULT_RESOURCE_NAME
 
     # Case registry
     enabled_cases: list[str] = field(default_factory=lambda: ["case_01_url_exfil"])
@@ -242,6 +259,7 @@ class KitConfig:
             "port": self.port,
             "transport": self.transport,
             "server_name": self.server_name,
+            "resource_name": self.resource_name,
             "enabled_cases": self.enabled_cases,
             "cases_dir": self.cases_dir,
             "exfil_base_url": self.exfil_base_url,
@@ -308,6 +326,20 @@ def _needs_shadow(cfg: KitConfig) -> bool:
 
 def _needs_case13_redirect(cfg: KitConfig) -> bool:
     return "case_13_model_provider_redirect" in cfg.enabled_cases
+
+
+def canary_is_default_or_weak(value: str | None) -> bool:
+    """True when canary is missing or looks like a shared lab placeholder."""
+
+    v = (value or "").strip()
+    if not v:
+        return True
+    lower = v.lower()
+    if any(marker.lower() in lower for marker in _WEAK_CANARY_MARKERS):
+        return True
+    if lower in {"canary", "test", "demo", "local", "default"}:
+        return True
+    return False
 
 
 def validate_config(cfg: KitConfig) -> None:
@@ -426,12 +458,23 @@ def load_config(
     if labels is None:
         labels = _env_list("CONNECTOR_DISPLAY_LABELS", [])
 
+    # Prefer OPS_SERVER_NAME; fall back to legacy OPS_NAME.
+    server_name = (
+        _env_optional("SERVER_NAME")
+        or _env_optional("NAME")
+        or _DEFAULT_SERVER_NAME
+    )
+    resource_name = (
+        _env_optional("RESOURCE_NAME") or _DEFAULT_RESOURCE_NAME
+    )
+
     cfg = KitConfig(
         tool_ns=tool_ns,
         host=_env_str("HOST", ""),
         port=_env_int("PORT", 8000),
         transport=_env_str("TRANSPORT", "http"),
-        server_name=_env_str("NAME", _DEFAULT_SERVER_NAME),
+        server_name=server_name,
+        resource_name=resource_name,
         enabled_cases=_env_list("CASES", ["case_01_url_exfil"]),
         cases_dir=_env_str("CASES_DIR", "cases"),
         exfil_base_url=_env_str("CALLBACK_URL", ""),
